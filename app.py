@@ -3,43 +3,55 @@ import pandas as pd
 import plotly.express as px
 import numpy as np
 
-st.set_page_config(layout="wide")
+st.set_page_config(
+    page_title="Global GDP Dashboard",
+    page_icon="🌍",
+    layout="wide"
+)
 
-# Load data
-df = pd.read_csv("refined_gdp_per_capita_long.csv")
-df = df.dropna()
-df["Year"] = df["Year"].astype(int)
+# -------------------------
+# LOAD DATA (Optimized)
+# -------------------------
+@st.cache_data
+def load_data():
+    df = pd.read_csv("refined_gdp_per_capita_long.csv")
+    df = df.dropna()
+    df["Year"] = df["Year"].astype(int)
+    df = df.sort_values(["Country", "Year"])
+    df["YoY_Growth_%"] = df.groupby("Country")["GDP_per_capita_USD"].pct_change() * 100
+    return df
 
-# Sort & growth
-df = df.sort_values(["Country", "Year"])
-df["YoY_Growth_%"] = df.groupby("Country")["GDP_per_capita_USD"].pct_change() * 100
+df = load_data()
 
-# Sidebar filters
-st.sidebar.title("🔧 Dashboard Controls")
+# -------------------------
+# SIDEBAR
+# -------------------------
+st.sidebar.title("🔧 Controls")
 
 countries = st.sidebar.multiselect(
     "Select Countries",
-    options=sorted(df["Country"].unique()),
-    default=list(df["Country"].unique()[:8])
+    sorted(df["Country"].unique()),
+    default=sorted(df["Country"].unique())[:8]
 )
 
-year_min, year_max = int(df.Year.min()), int(df.Year.max())
 year_range = st.sidebar.slider(
     "Select Year Range",
-    year_min,
-    year_max,
-    (2000, year_max)
+    int(df.Year.min()),
+    int(df.Year.max()),
+    (2000, int(df.Year.max()))
 )
 
-top_n = st.sidebar.slider("Top N Countries (Ranking)", 5, 30, 10)
+top_n = st.sidebar.slider("Top N (CAGR Ranking)", 5, 25, 10)
 
-# Filter
+# Filter data
 filtered = df[
     (df["Country"].isin(countries)) &
     (df["Year"].between(year_range[0], year_range[1]))
 ]
 
+# -------------------------
 # CAGR
+# -------------------------
 def calculate_cagr(group):
     start = group.iloc[0]["GDP_per_capita_USD"]
     end = group.iloc[-1]["GDP_per_capita_USD"]
@@ -55,16 +67,27 @@ cagr_df = (
     .dropna()
 )
 
-# Title
-st.title("🌍 Global GDP per Capita – Interactive Dashboard")
+# -------------------------
+# HEADER
+# -------------------------
+st.title("🌍 Global GDP per Capita Intelligence Dashboard")
+st.markdown("Interactive economic comparison, growth trends, and performance analytics.")
 
-# KPIs
-col1, col2, col3 = st.columns(3)
+# -------------------------
+# KPI SECTION
+# -------------------------
+col1, col2, col3, col4 = st.columns(4)
+
 col1.metric("Countries Selected", len(countries))
 col2.metric("Year Range", f"{year_range[0]} – {year_range[1]}")
-col3.metric("Avg CAGR", f"{(cagr_df.CAGR.mean() * 100):.2f}%")
+col3.metric("Average CAGR", f"{(cagr_df.CAGR.mean()*100):.2f}%")
+col4.metric("Latest Year", filtered["Year"].max())
 
-# Map
+st.divider()
+
+# -------------------------
+# MAP
+# -------------------------
 latest_year = filtered["Year"].max()
 map_df = filtered[filtered["Year"] == latest_year]
 
@@ -74,37 +97,48 @@ fig_map = px.choropleth(
     locationmode="country names",
     color="GDP_per_capita_USD",
     hover_name="Country",
+    color_continuous_scale="viridis",
     title=f"GDP per Capita by Country ({latest_year})"
 )
+
 st.plotly_chart(fig_map, use_container_width=True)
 
-# Trend
-fig_trend = px.line(
-    filtered,
-    x="Year",
-    y="GDP_per_capita_USD",
-    color="Country",
-    title="GDP per Capita Trends"
-)
-st.plotly_chart(fig_trend, use_container_width=True)
+st.divider()
 
-# CAGR bar
-top_cagr = cagr_df.sort_values("CAGR", ascending=False).head(top_n)
-fig_cagr = px.bar(
-    top_cagr,
-    x="Country",
-    y="CAGR",
-    title="Top Countries by CAGR"
-)
-st.plotly_chart(fig_cagr, use_container_width=True)
+# -------------------------
+# TREND + CAGR SIDE BY SIDE
+# -------------------------
+colA, colB = st.columns(2)
 
-# Table + export
-st.subheader("📋 Data")
-st.dataframe(filtered)
+with colA:
+    fig_trend = px.line(
+        filtered,
+        x="Year",
+        y="GDP_per_capita_USD",
+        color="Country",
+        title="GDP per Capita Trends"
+    )
+    st.plotly_chart(fig_trend, use_container_width=True)
 
+with colB:
+    top_cagr = cagr_df.sort_values("CAGR", ascending=False).head(top_n)
+    fig_cagr = px.bar(
+        top_cagr,
+        x="Country",
+        y="CAGR",
+        title="Top Countries by CAGR"
+    )
+    st.plotly_chart(fig_cagr, use_container_width=True)
+
+st.divider()
+
+# -------------------------
+# DATA EXPORT
+# -------------------------
+st.subheader("📥 Export Data")
 csv = filtered.to_csv(index=False).encode("utf-8")
 st.download_button(
-    "⬇️ Download CSV",
+    "Download Filtered Data (CSV)",
     csv,
     "gdp_dashboard_export.csv",
     "text/csv"
