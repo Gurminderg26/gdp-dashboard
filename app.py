@@ -133,6 +133,20 @@ with colB:
 st.divider()
 
 # -------------------------
+# PIE CHART - GDP DISTRIBUTION
+# -------------------------
+if len(map_df) > 1:
+    fig_pie = px.pie(
+        map_df,
+        names="Country",
+        values="GDP_per_capita_USD",
+        title=f"GDP per Capita Distribution by Country ({latest_year})"
+    )
+    st.plotly_chart(fig_pie, use_container_width=True)
+
+st.divider()
+
+# -------------------------
 # DATA EXPORT
 # -------------------------
 st.subheader("📥 Export Data")
